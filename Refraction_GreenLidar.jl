@@ -33,8 +33,7 @@ header, points = LazIO.load(lazinput)
 
 #Open the LAZ point cloud
 dataset = LazIO.open(lazinput)
-k = dataset.header
-k1 = dataset.point
+
 #Iterate over points and Store real coordinates in a table using offset and scale factor
 offset = [dataset.header.x_offset, dataset.header.y_offset, dataset.header.z_offset]
 scale_factor = [dataset.header.x_scale_factor, dataset.header.y_scale_factor, dataset.header.z_scale_factor]
