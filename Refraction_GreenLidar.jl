@@ -25,7 +25,7 @@ for p in dataset
     x = (p.X * scale_factor[1] + offset[1])
     y = (p.Y * scale_factor[2] + offset[2])
     z = (p.Z * scale_factor[3] + offset[3])
-    push!(coords,[x, y, z, p.intensity, p.scan_angle_rank,p.classification])
+    push!(coords,[x, y, z, p.intensity, p.return_number, p.scan_angle_rank,p.classification])
 end
 println("The first element using offset: ",coords[1])
 println("The length of coordinates: ",length(coords))
@@ -68,64 +68,71 @@ function centroid(coords)
 end
 x_avg, y_avg, z_avg = centroid(coords)
 
-
-#save only water points below -2m
-indexs = []
-other = []
-for (index,value) in enumerate(coords)
-    if value[3] <= -2.0
-        push!(indexs,index)
+#water surface points, return number value 9.0 (the smallest one)
+surface_water = Array{Float64}[]
+depth_water = Array{Float64}[]
+for value in coords
+    if value[5] == 9.0
+        push!(surface_water,value)
     else
-        push!(other,index)
+        push!(depth_water,value)
     end
 end
-
+watmax, watmin = find_max_min(surface_water)
+depthmax, depthmin = find_max_min(depth_water)
 #iterate through the points _trial version
 # 1 degree to 0.01745329 radians, sin() output in radians, sind() output in degrees
 # asind() --> degress, asin() --> radians
-smalldataset = coords[1:2]
-subset = coords[1:end]
 
+#subset of surface water
+surface_water = surface_water[1:50]
+#for every surface water point, define a line and find the water points that belong to this line
+#store them in array with subarrays for every point
 inters = []
-for p in smalldataset
+for p in surface_water
     angle_water = asind((1.000293*sind(20)/1.333))
-    #equation of line y=ax+b
-    a = tand(angle_water)
-    b = p[2] - (a * p[1])
+    #equation of line y=ax+b, where y = z
+    a =  - tand(90 - angle_water)
+    b = p[3] - (a * p[1])
+    #use a threshold value to achieve the equality due to the amount of digits
     threshold = 0.1
 
     inter = []
-    for (ind,point) in enumerate(subset)
+    for (ind,point) in enumerate(depth_water)
         if ind in inters
             continue
-        elseif (a*point[1] + b - threshold) <= point[2] <= (a*point[1] + b + threshold)
-            #println("Intersection point: ",point)
+        elseif  round(point[3],digits=3) == round((a * point[1] + b -threshold),digits=3)
+            println("Intersection point: ",point)
             push!(inter,ind)
         end
     end
     push!(inters,inter)
 end
 
-c = Array{Number}[]
+#store the water points with new xcoord
+#modify the xcoord of every point
+newarray = Array{Number}[]
 for part in inters
     for i in part
-        x,y,z = coords[i]
-        x_big = z * tand(20)
-        x_orig = z * tand(asind((1.000293*sind(20)/1.333)))
+        x,y,z = depth_water[i]
+        x1 = z * tand(20) #for angle 20 degrees: x footprint in the water bottom
+        x2 = z * tand(asind((1.000293*sind(20)/1.333))) #for angle 14,87 degrees: x footprint in the water bottom
 
-        x_new = x_big - x_orig
-        push!(c,[i,x_new])
+        x_diff = x1 - x2 #difference
+        xfinal = x + x_diff #new xcoord
+        push!(newarray,[i,xfinal])
     end
 end
 
-#function that writes the LAZ pointcloud with specific points
+#function that writes the LAZ pointcloud with new xcoord
 function write_lazfile(path,filenam,dataset,c)
     laz_out_new = joinpath(path,filenam)
     LazIO.write(laz_out_new, dataset) do io
         for (index,value) in enumerate(dataset)
             for part in c
-                if index == part
-                    value.X = LasIO.xcoord(c[index][2])
+                if index == convert(Int32,part[1])
+                    x = trunc(Int32,part[2]) #is it right to use the trunc tool??
+                    value.X = LasIO.xcoord(x,header)
                     LazIO.writepoint(io, value)
                 end
             end
@@ -133,58 +140,15 @@ function write_lazfile(path,filenam,dataset,c)
     end
 end
 
-function writeroflaz(path,name,dataset,c)
-    # How to write a LAZ pointcloud
-    #define output file
-    laz_out = joinpath(path, name)
-    # open reader
-    reader = Ref{Ptr{Cvoid}}(C_NULL)
-    LazIO.@check reader[] LazIO.laszip_create(reader)
-    LazIO.@check reader[] LazIO.laszip_open_reader(reader[], lazinput, Ref(Cint(0)))
 
-    # create writer
-    writer = Ref{Ptr{Cvoid}}(C_NULL)
-    LazIO.@check writer[] LazIO.laszip_create(writer)
-
-    # copy header from reader to writer (to be updated later)
-    header_ptr = Ref{Ptr{LazIO.LazHeader}}(C_NULL)
-    LazIO.@check header_ptr[] LazIO.laszip_get_header_pointer(reader[], header_ptr)
-    LazIO.@check writer[] LazIO.laszip_set_header(writer[], header_ptr[])
-
-    #open writer
-    LazIO.@check writer[] LazIO.laszip_open_writer(writer[], laz_out, Cint(1))
-
-    # save some points
-    for (index,value) in enumerate(dataset)
-        for part in c
-            if index == convert(Int,part[1])
-                println(typeof(c[index][2]))
-                println(typeof(index))
-                break
-                #define pointer
-                point_ptr = Ref{Ptr{LazIO.LazPoint}}(C_NULL)
-                LazIO.@check point_ptr[] LazIO.laszip_get_point_pointer(reader[], point_ptr)
-                LazIO.@check reader[] LazIO.laszip_read_point(reader[])
-                #retrieve the point values
-                value = unsafe_load(point_ptr[])
-                value.X = convert(Int32,c[index][2]) #to doo , ERROOR
-
-                # write it to the writer
-                LazIO.@check writer[] LazIO.laszip_set_point(writer[],Ref(value))
-                LazIO.@check writer[] LazIO.laszip_write_point(writer[])
-                # update the inventory
-                LazIO.@check writer[] LazIO.laszip_update_inventory(writer[])
+#function that writes LAZ pointcloud based on the return number of every point
+function write_output(path,name, dataset)
+    laz_out_new = joinpath(path,name)
+    LazIO.write(laz_out_new, dataset) do io
+        for value in dataset
+            if value.return_number != 9
+                LazIO.writepoint(io,value)
             end
         end
     end
-
-    # close files and destroy pointers
-    LazIO.@check reader[] LazIO.laszip_close_reader(reader[])
-    LazIO.@check writer[] LazIO.laszip_close_writer(writer[])
-    LazIO.@check reader[] LazIO.laszip_destroy(reader[])
-    LazIO.@check writer[] LazIO.laszip_destroy(writer[])
 end
-
-writeroflaz(path,"_final3.laz",dataset,c)
-#write output
-#write_lazfile(path,"_dokimi6.laz",dataset,c)
