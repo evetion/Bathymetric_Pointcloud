@@ -142,6 +142,7 @@ end
 
 
 #function that writes LAZ pointcloud based on the return number of every point
+#extra function
 function write_output(path,name, dataset)
     laz_out_new = joinpath(path,name)
     LazIO.write(laz_out_new, dataset) do io
