@@ -1,22 +1,11 @@
-#Pkg.add("Dates")
+module mypackage
+
 using LazIO
 using LasIO
 using FileIO
 using Dates
-#Cropped point cloud on water polygons
-path = "C:/Users/user/Desktop/Thesis/Data/Archive/GreenLidarData/"
-filen = "180416_110851_Scanner_1_0_RDNAP_PF0_filteredHeight_CroppedWater.laz"
-filenn = "180416_110851_Scanner_1_0_RDNAP_PF3_CroppedWater_filterHeight.laz"
-lazinput = path * filenn
-#Only water points
-lazwater = path * "180416_110851_selected_waterpoints.laz"
 
-#Open LAZ pointcloud
-testfile = File{format"LAZ_"}(lazinput)
-header,points = load(testfile)
-
-#coordinates
-function cods(points)
+function cods(points,header)
     coords = Array{Any}[]
     for p in points
         x = xcoord(p,header)
@@ -33,7 +22,6 @@ function cods(points)
     end
     return coords
 end
-coords = cods(points)
 
 function refraction(watersurface,underwater)
     x0,y0,z0 = watersurface
@@ -64,23 +52,4 @@ function refraction(watersurface,underwater)
     return correct
 end
 
-#Indexes with the combination of points
-indexes = Array{Any}[]
-for i in range(1,stop=length(coords)-1)
-    k = 1
-    if coords[i][5]<coords[i+1][5]
-         if coords[i][6]> 1  && coords[i+k][6] == coords[i][6]
-             push!(indexes,[i,i+k])
-             k = k+1
-         end
-    end
-end
-
-#Array with the corrected points
-new_points = Array{Any}[]
-for group in indexes
-    point1 = coords[group[1]]
-    point2 = coords[group[2]]
-    new_point = refraction(point1,point2)
-    push!(new_points,[new_point])
-end
+end # module
