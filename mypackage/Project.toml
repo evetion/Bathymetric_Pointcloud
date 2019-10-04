@@ -1,0 +1,10 @@
+name = "mypackage"
+uuid = "5b086010-d246-11e9-23bb-d73226ba166b"
+authors = ["VasilisAle <42702373+VasilisAle@users.noreply.github.com>"]
+version = "0.1.0"
+
+[deps]
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+LasIO = "570499db-eae3-5eb6-bdd5-a5326f375e68"
+LazIO = "c3605908-9f0f-11e8-0a72-0d361c15a277"
